@@ -1,102 +1,122 @@
-$( document ).ready(function() {
+var request = require('request');
 
-  $('.js-contact-form-send-btn').click(function(e) {
-    var form = $('.contact-form');
-    var formWrapper = form.closest('.form-wrapper');
+var fields = [
+  {
+    label: 'Message',
+    field: 'message',
+    required: true
+  },
+  {
+    label: 'Company',
+    field: 'company',
+    required: false
+  },
+  {
+    label: 'Email',
+    field: 'email',
+    required: true
+  },
+  {
+    label: 'Last Name',
+    field: 'lastname',
+    required: true
+  },
+  {
+    label: 'First Name',
+    field: 'firstname',
+    required: true
+  }
+];
 
-    var isModal = form.closest('#contact-modal').length !== 0;
+return function (ctx, cb) {
 
-    // Returns
-    if(formWrapper.hasClass('is-sending')) {
-      return;
+  var validation = validateRequest(ctx);
+  if (!validation.valid) {
+    return cb(validation);
+  }
+
+  var name = ctx.body.firstname + " " + ctx.body.lastname;
+
+  var content = getEmailContent(ctx);
+
+  request.post({
+    url: 'https://api.sendgrid.com/api/mail.send.json',
+    form: {
+      'api_user': ctx.data.SENDGRID_USER,
+      'api_key': ctx.data.SENDGRID_KEY,
+      'to': ctx.data.TO_EMAIL,
+      'subject': 'Contact request from gon.to from: ' + name,
+      'from': ctx.data.TO_EMAIL,
+      'replyto': ctx.data.email,
+      'html': content
+    }
+  }, function(error, response, body) {
+    var validation = {
+      valid: true,
+      message: ''
+    };
+    if (error) {
+      validation.valid = false;
+      validation.message = "Internal server error. Please try again later!"
+      return cb(validation);
+    }
+    if (response && response.statusCode !== 200 && response.statusCode !== 201) {
+      validation.valid = false;
+      console.log("Error", body);
+      validation.message = "Internal server error. Please try again later!"
+      return cb(validation)
     }
 
-    if (!window.is_mobile) {
-      if (( typeof(form[0].checkValidity) == "function" ) && !form[0].checkValidity()) {
-        return;
-      }   
-    } else {
-      e.preventDefault();
+    return cb(null, body);
+    
+  });
+}
+
+
+
+
+
+function validateRequest(ctx) {
+  var validation = {
+    valid: true,
+    message: ''
+  };
+  fields.forEach(function(field) {
+    if (field.required && !hasOwnPropertyValue(ctx.body, field.field)) {
+      validation.valid = false;
+      validation.message = "The required property " + field.field + " wasn't send";
     }
-    
-    
-    
-
-    // Fields
-    var firstnameField = form.find('[name="firstname"]');
-    var firstname = firstnameField.val();
-
-    var lastnameField = form.find('[name="lastname"]');
-    var lastname = lastnameField.val();
-
-    var companyField = form.find('[name="company"]');
-    var company = companyField.val();
-
-    var messageField = form.find('[name="message"]');
-    var message = messageField.val();
-
-    var emailField = form.find('[name="email"]');
-    var email = emailField.val();
-
-    formWrapper.addClass('is-sending');
-
-    // Call the Webtask
-    $.ajax({
-      url: 'https://webtask.it.auth0.com/api/run/wt-martin-gon_to-0/contact-form?webtask_no_cache=1',
-      // Fake URL
-      // url: 'https://webtask.it.auth0.com/api/run/wt-martin-gon_to-0/fake-contact-form?webtask_no_cache=1',
-      method: 'POST',
-      data: {
-        firstname: firstname,
-        lastname: lastname,
-        email: email,
-        company: company,
-        message: message,
-      },
-      dataType: 'json',
-      jsonp: false
-    }).then(function(data) {
-      $('.js-contact-form-ok').text('Message sent succesfully');
-      $('.js-contact-form-ok').addClass('is-visible');
-      formWrapper.addClass('is-result').removeClass('is-sending');
-      setTimeout(function() {
-        hideMessages();
-    }, 2500);
-
-    }, function(response) {
-      $('.js-contact-form-error').text(response.responseJSON.message);
-      $('.js-contact-form-error').addClass('is-visible');
-      formWrapper.addClass('is-result').removeClass('is-sending');
-      console.log("Error sending form", response);
-      setTimeout(function() {
-        hideMessages(true);
-      }, isModal ? 4000 : 2500);
-
-    });
-
-    function hideMessages(error) {
-      if (!error) {
-        formWrapper.addClass('is-hidden');
-        firstnameField.val('');
-        lastnameField.val('');
-        companyField.val('');
-        emailField.val('');
-        messageField.val('');
-        autosize.destroy(messageField);
-        if (isModal) {
-          $.magnificPopup.instance.close();
-        }
-      } else {
-        $('.js-contact-form-error').removeClass('is-visible');
-        formWrapper.removeClass('is-result')
-      }
-      formWrapper.removeClass('is-hidden is-result');
-      
+    if (field.field === 'email' && !validEmail(ctx.body.email)) {
+      validation.valid = false;
+      validation.message = "The email isn't valid";
     }
-
-    // Always return false to avoid real submit
-    return false;
-
 
   });
-});
+
+  return validation;
+}
+
+function getEmailContent(ctx) {
+  var html = "";
+
+  fields.forEach(function(field) {
+    html += '<p><strong>' + field.label + ':</strong> ' + (ctx.body[field.field] || '') + '</p>';
+  });
+
+  // Fix line breaks
+  html = html.replace(/(?:\r\n|\r|\n)/g, '<br />');
+
+  return html;
+
+}
+
+// Helper functions
+function hasOwnPropertyValue(obj, property) {
+  return Object.prototype.hasOwnProperty.call(obj, property) && !!obj[property].length;
+}
+
+function validEmail(value) {
+  var email = new RegExp(/^[-a-z0-9~!$%^&*_=+}{\'?]+(\.[-a-z0-9~!$%^&*_=+}{\'?]+)*@([a-z0-9_][-a-z0-9_]*(\.[-a-z0-9_]+)*\.(aero|arpa|biz|com|coop|edu|gov|info|int|mil|museum|name|net|org|pro|travel|mobi|[a-z][a-z])|([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}))(:[0-9]{1,5})?$/i);
+
+  return email.test(value);
+}
