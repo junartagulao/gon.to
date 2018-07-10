@@ -35,7 +35,7 @@ return function (ctx, cb) {
     return cb(validation);
   }
 
-  var name = ctx.data.firstname + " " + ctx.data.lastname;
+  var name = ctx.body.firstname + " " + ctx.body.lastname;
 
   var content = getEmailContent(ctx);
 
@@ -82,11 +82,11 @@ function validateRequest(ctx) {
     message: ''
   };
   fields.forEach(function(field) {
-    if (field.required && !hasOwnPropertyValue(ctx.data, field.field)) {
+    if (field.required && !hasOwnPropertyValue(ctx.body, field.field)) {
       validation.valid = false;
       validation.message = "The required property " + field.field + " wasn't send";
     }
-    if (field.field === 'email' && !validEmail(ctx.data.email)) {
+    if (field.field === 'email' && !validEmail(ctx.body.email)) {
       validation.valid = false;
       validation.message = "The email isn't valid";
     }
@@ -100,7 +100,7 @@ function getEmailContent(ctx) {
   var html = "";
 
   fields.forEach(function(field) {
-    html += '<p><strong>' + field.label + ':</strong> ' + (ctx.data[field.field] || '') + '</p>';
+    html += '<p><strong>' + field.label + ':</strong> ' + (ctx.body[field.field] || '') + '</p>';
   });
 
   // Fix line breaks
@@ -112,7 +112,7 @@ function getEmailContent(ctx) {
 
 // Helper functions
 function hasOwnPropertyValue(obj, property) {
-  return obj.hasOwnProperty(property) && !!obj[property].length;
+  return Object.prototype.hasOwnProperty.call(obj, property) && !!obj[property].length;
 }
 
 function validEmail(value) {
